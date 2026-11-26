@@ -1,0 +1,88 @@
+@baseUrl = http://localhost:5163/api
+
+### =====================================================================
+### ROTEIRO DA DEMO: execute as requisições de cima para baixo.
+### Os IDs são capturados automaticamente das respostas anteriores.
+### =====================================================================
+
+### 1. Lista os produtos (5 já vêm cadastrados pelo seed)
+GET {{baseUrl}}/produtos
+
+### 2. Cadastra um produto novo (o SKU é normalizado para maiúsculas)
+# @name criarProduto
+POST {{baseUrl}}/produtos
+Content-Type: application/json
+
+{
+  "sku": "tapete-sala-01",
+  "nome": "Tapete Sala 2x1,5m",
+  "pesoKg": 4.2,
+  "estoqueInicial": 20
+}
+
+### 3. Cria um pedido com frete Expresso para Barra Velha/SC
+# @name criarPedido
+POST {{baseUrl}}/pedidos
+Content-Type: application/json
+
+{
+  "cliente": "Maria Silva",
+  "enderecoEntrega": {
+    "logradouro": "Rua das Palmeiras",
+    "numero": "100",
+    "cidade": "Barra Velha",
+    "uf": "SC",
+    "cep": "88390-000"
+  },
+  "modalidadeFrete": "Expresso"
+}
+
+### 4. Adiciona 3 tapetes ao pedido (o estoque cai de 20 para 17)
+POST {{baseUrl}}/pedidos/{{criarPedido.response.body.$.id}}/itens
+Content-Type: application/json
+
+{
+  "produtoId": "{{criarProduto.response.body.$.id}}",
+  "quantidade": 3
+}
+
+### 5. REGRA: estoque insuficiente -> 422
+POST {{baseUrl}}/pedidos/{{criarPedido.response.body.$.id}}/itens
+Content-Type: application/json
+
+{
+  "produtoId": "{{criarProduto.response.body.$.id}}",
+  "quantidade": 999
+}
+
+### 6. REGRA: não dá para despachar sem separar -> 422
+POST {{baseUrl}}/pedidos/{{criarPedido.response.body.$.id}}/despachar
+
+### 7. STRATEGY: cota o frete em todas as modalidades
+GET {{baseUrl}}/pedidos/{{criarPedido.response.body.$.id}}/cotacoes-frete
+
+### 8. Operador inicia a separação (picking)
+POST {{baseUrl}}/pedidos/{{criarPedido.response.body.$.id}}/iniciar-separacao
+
+### 9. Operador conclui a separação
+POST {{baseUrl}}/pedidos/{{criarPedido.response.body.$.id}}/concluir-separacao
+
+### 10. Despacha: o frete é calculado pela estratégia da modalidade do pedido
+POST {{baseUrl}}/pedidos/{{criarPedido.response.body.$.id}}/despachar
+
+### 11. REGRA: pedido despachado não pode ser cancelado -> 422
+POST {{baseUrl}}/pedidos/{{criarPedido.response.body.$.id}}/cancelar
+
+### 12. Filtra pedidos por status
+GET {{baseUrl}}/pedidos?status=Despachado
+
+### 13. Recurso inexistente -> 404
+GET {{baseUrl}}/pedidos/00000000-0000-0000-0000-000000000001
+
+### 14. Validação de entrada (falta o endereço) -> 400
+POST {{baseUrl}}/pedidos
+Content-Type: application/json
+
+{
+  "cliente": "Sem Endereço"
+}
